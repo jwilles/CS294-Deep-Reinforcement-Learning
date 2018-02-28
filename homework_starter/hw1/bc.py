@@ -157,7 +157,7 @@ def model(X_train, Y_train, X_test, Y_test, learning_rate = 0.0001,
         for epoch in range(num_epochs):
 
             epoch_cost = 0.                       # Defines a cost related to an epoch
-            _, cost = sess.run([optimizer, cost], feed_dict={X: X, Y: Y})
+            _, cost = sess.run([optimizer, cost], feed_dict={X: X_train, Y: Y_train})
 
             # Print the cost every epoch
             if print_cost == True and epoch % 100 == 0:
