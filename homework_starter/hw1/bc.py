@@ -1,58 +1,223 @@
-import pickle, tensorflow as tf, tf_util, numpy as np
+import pickle, tensorflow as tf, numpy as np
+import matplotlib.pyplot as plt
+from tensorflow.python.framework import ops
 
-def load_policy(filename):
-    with open(filename, 'rb') as f:
-        data = pickle.loads(f.read())
+def create_placeholders(n_x, n_y):
+    """
+    Creates the placeholders for the tensorflow session.
+    
+    Arguments:
+    n_x -- scalar, size of an image vector (num_px * num_px = 64 * 64 * 3 = 12288)
+    n_y -- scalar, number of classes (from 0 to 5, so -> 6)
+    
+    Returns:
+    X -- placeholder for the data input, of shape [n_x, None] and dtype "float"
+    Y -- placeholder for the input labels, of shape [n_y, None] and dtype "float"
+    
+    Tips:
+    - You will use None because it let's us be flexible on the number of examples you will for the placeholders.
+      In fact, the number of examples during test/train is different.
+    """
 
-    # assert len(data.keys()) == 2
-    nonlin_type = data['nonlin_type']
-    policy_type = [k for k in data.keys() if k != 'nonlin_type'][0]
+    X = tf.placeholder(tf.float32, shape = (n_x, None))
+    Y = tf.placeholder(tf.float32, shape = (n_y, None))
+    
+    return X, Y
 
-    assert policy_type == 'GaussianPolicy', 'Policy type {} not supported'.format(policy_type)
-    policy_params = data[policy_type]
 
-    assert set(policy_params.keys()) == {'logstdevs_1_Da', 'hidden', 'obsnorm', 'out'}
 
-    # Keep track of input and output dims (i.e. observation and action dims) for the user
+def initialize_parameters():
+    """
+    Initializes parameters to build a neural network with tensorflow. The shapes are:
+                        W1 : [25, 12288]
+                        b1 : [25, 1]
+                        W2 : [12, 25]
+                        b2 : [12, 1]
+                        W3 : [6, 12]
+                        b3 : [6, 1]
+    
+    Returns:
+    parameters -- a dictionary of tensors containing W1, b1, W2, b2, W3, b3
+    """
+        
+    W1 = tf.get_variable("W1", [25,376], initializer = tf.contrib.layers.xavier_initializer())
+    b1 = tf.get_variable("b1", [25,1], initializer = tf.zeros_initializer())
+    W2 = tf.get_variable("W2", [12, 25], initializer = tf.contrib.layers.xavier_initializer())
+    b2 = tf.get_variable("b2", [12, 1], initializer = tf.zeros_initializer())
+    W3 = tf.get_variable("W3", [17, 12], initializer = tf.contrib.layers.xavier_initializer())
+    b3 = tf.get_variable("b3", [17,1], initializer = tf.zeros_initializer())
 
-    def build_policy(obs_bo):
-        def read_layer(l):
-            assert list(l.keys()) == ['AffineLayer']
-            assert sorted(l['AffineLayer'].keys()) == ['W', 'b']
-            return l['AffineLayer']['W'].astype(np.float32), l['AffineLayer']['b'].astype(np.float32)
+    parameters = {"W1": W1,
+                  "b1": b1,
+                  "W2": W2,
+                  "b2": b2,
+                  "W3": W3,
+                  "b3": b3}
+    
+    return parameters
 
-        def apply_nonlin(x):
-            if nonlin_type == 'lrelu':
-                return tf_util.lrelu(x, leak=.01) # openai/imitation nn.py:233
-            elif nonlin_type == 'tanh':
-                return tf.tanh(x)
-            else:
-                raise NotImplementedError(nonlin_type)
 
-        # Build the policy. First, observation normalization.
-        assert list(policy_params['obsnorm'].keys()) == ['Standardizer']
-        obsnorm_mean = policy_params['obsnorm']['Standardizer']['mean_1_D']
-        obsnorm_meansq = policy_params['obsnorm']['Standardizer']['meansq_1_D']
-        obsnorm_stdev = np.sqrt(np.maximum(0, obsnorm_meansq - np.square(obsnorm_mean)))
-        print('obs', obsnorm_mean.shape, obsnorm_stdev.shape)
-        normedobs_bo = (obs_bo - obsnorm_mean) / (obsnorm_stdev + 1e-6) # 1e-6 constant from Standardizer class in nn.py:409 in openai/imitation
+def forward_propagation(X, parameters):
+    """
+    Implements the forward propagation for the model: LINEAR -> RELU -> LINEAR -> RELU -> LINEAR -> SOFTMAX
+    
+    Arguments:
+    X -- input dataset placeholder, of shape (input size, number of examples)
+    parameters -- python dictionary containing your parameters "W1", "b1", "W2", "b2", "W3", "b3"
+                  the shapes are given in initialize_parameters
 
-        curr_activations_bd = normedobs_bo
+    Returns:
+    Z3 -- the output of the last LINEAR unit
+    """
+    
+    # Retrieve the parameters from the dictionary "parameters" 
+    W1 = parameters['W1']
+    b1 = parameters['b1']
+    W2 = parameters['W2']
+    b2 = parameters['b2']
+    W3 = parameters['W3']
+    b3 = parameters['b3']
+    
+    Z1 = tf.add(tf.matmul(W1, X), b1)                                             # Z1 = np.dot(W1, X) + b1
+    A1 = tf.nn.relu(Z1)                                             # A1 = relu(Z1)
+    Z2 = tf.add(tf.matmul(W2, A1), b2)                                              # Z2 = np.dot(W2, a1) + b2
+    A2 = tf.nn.relu(Z2)                                              # A2 = relu(Z2)
+    Z3 = tf.add(tf.matmul(W3, A2), b3)                                               # Z3 = np.dot(W3,Z2) + b3
+    
+    return Z3
 
-        # Hidden layers next
-        assert list(policy_params['hidden'].keys()) == ['FeedforwardNet']
-        layer_params = policy_params['hidden']['FeedforwardNet']
-        for layer_name in sorted(layer_params.keys()):
-            l = layer_params[layer_name]
-            W, b = read_layer(l)
-            curr_activations_bd = apply_nonlin(tf.matmul(curr_activations_bd, W) + b)
 
-        # Output layer
-        W, b = read_layer(policy_params['out'])
-        output_bo = tf.matmul(curr_activations_bd, W) + b
-        return output_bo
+def compute_cost(Z3, Y):
+    """
+    Computes the cost
+    
+    Arguments:
+    Z3 -- output of forward propagation (output of the last LINEAR unit), of shape (6, number of examples)
+    Y -- "true" labels vector placeholder, same shape as Z3
+    
+    Returns:
+    cost - Tensor of the cost function
+    """
+    
+    
+    cost = tf.reduce_mean(tf.square(Y-Z3))
+    
+    return cost
 
-    obs_bo = tf.placeholder(tf.float32, [None, None])
-    a_ba = build_policy(obs_bo)
-    policy_fn = tf_util.function([obs_bo], a_ba)
-    return policy_fn
+
+def model(X_train, Y_train, X_test, Y_test, learning_rate = 0.0001,
+          num_epochs = 1500, minibatch_size = 32, print_cost = True):
+    """
+    Implements a three-layer tensorflow neural network: LINEAR->RELU->LINEAR->RELU->LINEAR->SOFTMAX.
+    
+    Arguments:
+    X_train -- training set, of shape (input size = 12288, number of training examples = 1080)
+    Y_train -- test set, of shape (output size = 6, number of training examples = 1080)
+    X_test -- training set, of shape (input size = 12288, number of training examples = 120)
+    Y_test -- test set, of shape (output size = 6, number of test examples = 120)
+    learning_rate -- learning rate of the optimization
+    num_epochs -- number of epochs of the optimization loop
+    minibatch_size -- size of a minibatch
+    print_cost -- True to print the cost every 100 epochs
+    
+    Returns:
+    parameters -- parameters learnt by the model. They can then be used to predict.
+    """
+    
+    ops.reset_default_graph()                         # to be able to rerun the model without overwriting tf variables
+    (n_x, m) = X_train.shape                          # (n_x: input size, m : number of examples in the train set)
+    n_y = Y_train.shape[0]                            # n_y : output size
+    costs = []                                        # To keep track of the cost
+    
+    # Create Placeholders of shape (n_x, n_y)
+    X, Y = create_placeholders(n_x, n_y)
+
+    # Initialize parameters
+    parameters = initialize_parameters()
+    
+    # Forward propagation: Build the forward propagation in the tensorflow graph
+    Z3 = forward_propagation(X, parameters)
+    
+    # Cost function: Add cost function to tensorflow graph
+    cost = compute_cost(Z3, Y)
+    
+    # Backpropagation: Define the tensorflow optimizer. Use an AdamOptimizer.
+    optimizer = tf.train.AdamOptimizer(learning_rate = learning_rate).minimize(cost)
+    
+    # Initialize all the variables
+    init = tf.global_variables_initializer()
+
+    # Start the session to compute the tensorflow graph
+    with tf.Session() as sess:
+        
+        # Run the initialization
+        sess.run(init)
+        
+        # Do the training loop
+        for epoch in range(num_epochs):
+
+            epoch_cost = 0.                       # Defines a cost related to an epoch
+            _, cost = sess.run([optimizer, cost], feed_dict={X: X, Y: Y})
+
+            # Print the cost every epoch
+            if print_cost == True and epoch % 100 == 0:
+                print ("Cost after epoch %i: %f" % (epoch, epoch_cost))
+            if print_cost == True and epoch % 5 == 0:
+                costs.append(epoch_cost)
+                
+        # plot the cost
+        plt.plot(np.squeeze(costs))
+        plt.ylabel('cost')
+        plt.xlabel('iterations (per tens)')
+        plt.title("Learning rate =" + str(learning_rate))
+        plt.show()
+
+        # lets save the parameters in a variable
+        parameters = sess.run(parameters)
+        print ("Parameters have been trained!")
+
+        # Calculate the correct predictions
+        correct_prediction = tf.equal(tf.argmax(Z3), tf.argmax(Y))
+
+        # Calculate accuracy on the test set
+        accuracy = tf.reduce_mean(tf.cast(correct_prediction, "float"))
+
+        print ("Train Accuracy:", accuracy.eval({X: X_train, Y: Y_train}))
+        print ("Test Accuracy:", accuracy.eval({X: X_test, Y: Y_test}))
+        
+        return parameters
+
+
+
+def main():
+#    print (expert['observations'][0][0])
+#    print (len(expert['observations'][0]))
+#    print (expert['actions'][0])
+#    print (len(expert['actions'][0][0]))
+
+    expert = pickle.load( open( "expert_data.pkl", "rb" ) )
+ 
+    X = expert['observations']
+    Y = expert['actions']
+    Y = [i[0] for i in Y]
+
+    X = np.array(X)
+    Y = np.array(Y)
+
+    print (X.shape)
+    print (Y.shape)
+
+    X_train = X[:4000]
+    Y_train = Y[:4000]
+ 
+    X_test = X[4000:5000]
+    Y_test = Y[4000:5000]
+
+    
+    parameters = model(X_train.T, Y_train.T, X_test.T, Y_test.T)
+
+
+
+
+if __name__ == "__main__":
+    main()
