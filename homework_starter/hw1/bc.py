@@ -217,7 +217,5 @@ def main():
     parameters = model(X_train.T, Y_train.T, X_test.T, Y_test.T)
 
 
-
-
 if __name__ == "__main__":
     main()
