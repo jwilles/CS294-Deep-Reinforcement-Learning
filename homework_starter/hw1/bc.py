@@ -213,8 +213,9 @@ def main():
     X_test = X[4000:5000]
     Y_test = Y[4000:5000]
 
-    
     parameters = model(X_train.T, Y_train.T, X_test.T, Y_test.T)
+
+    print (parameters)
 
 
 if __name__ == "__main__":
