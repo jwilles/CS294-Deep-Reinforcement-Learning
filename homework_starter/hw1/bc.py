@@ -217,6 +217,7 @@ def main():
 
     print (parameters)
     print (parameters['W1'])
+    print (parameters['W2'])
 
 
 if __name__ == "__main__":
