@@ -189,11 +189,7 @@ def model(X_train, Y_train, X_test, Y_test, learning_rate = 0.0001,
 
 
 
-def main():
-#    print (expert['observations'][0][0])
-#    print (len(expert['observations'][0]))
-#    print (expert['actions'][0])
-#    print (len(expert['actions'][0][0]))
+def build_policy():
 
     expert = pickle.load( open( "expert_data.pkl", "rb" ) )
  
@@ -215,10 +211,11 @@ def main():
 
     parameters = model(X_train.T, Y_train.T, X_test.T, Y_test.T)
 
-    print (parameters)
-    print (parameters['W1'])
-    print (parameters['W2'])
+    with open('bc.pkl', 'wb') as f:
+      pickle.dump(parameters, f, pickle.HIGHEST_PROTOCOL)
+
+    
 
 
 if __name__ == "__main__":
-    main()
+    build_policy()
