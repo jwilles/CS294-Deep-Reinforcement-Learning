@@ -217,7 +217,6 @@ def build_policy():
 def run_policy():
     
     with tf.Session():
-#        tf_util.initialize()
 
         import gym
         env = gym.make('Humanoid-v1')
