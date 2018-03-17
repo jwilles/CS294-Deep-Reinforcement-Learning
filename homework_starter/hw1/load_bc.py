@@ -78,7 +78,7 @@ def forward_propagation(X, parameters):
     W3 = parameters['W3']
     b3 = parameters['b3']
     
-    Z1 = tf.add(tf.matmul(W1, X), b1)                                             # Z1 = np.dot(W1, X) + b1
+    Z1 = tf.add(tf.matmul(W1, tf.expand_dims(tf.cast(X, tf.float32)), 1), b1)                                             # Z1 = np.dot(W1, X) + b1
     A1 = tf.nn.relu(Z1)                                             # A1 = relu(Z1)
     Z2 = tf.add(tf.matmul(W2, A1), b2)                                              # Z2 = np.dot(W2, a1) + b2
     A2 = tf.nn.relu(Z2)                                              # A2 = relu(Z2)
@@ -214,8 +214,46 @@ def build_policy():
     with open('bc.pkl', 'wb') as f:
       pickle.dump(parameters, f, pickle.HIGHEST_PROTOCOL)
 
+def run_policy():
     
+    with tf.Session():
+#        tf_util.initialize()
+
+        import gym
+        env = gym.make('Humanoid-v1')
+        max_steps = env.spec.timestep_limit
+
+        parameters = pickle.load( open( "bc.pkl", "rb" ) )
+        print (parameters)
+
+        returns = []
+        observations = []
+        actions = []
+        for i in range(20):
+            print('iter', i)
+            obs = env.reset()
+            done = False
+            totalr = 0.
+            steps = 0
+            while not done:
+                print (obs)
+                action = forward_propagation(obs, parameters)
+                observations.append(obs)
+                actions.append(action)
+                obs, r, done, _ = env.step(action)
+                totalr += r
+                steps += 1
+                if args.render:
+                    env.render()
+                if steps % 100 == 0: print("%i/%i"%(steps, max_steps))
+                if steps >= max_steps:
+                    break
+            returns.append(totalr)
+
+        print('returns', returns)
+        print('mean return', np.mean(returns))
+        print('std of return', np.std(returns))
 
 
 if __name__ == "__main__":
-    build_policy()
+    run_policy()

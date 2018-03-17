@@ -27,12 +27,12 @@ def main():
 
         import gym
         env = gym.make(args.envname)
-        max_steps = args.max_timesteps or env.spec.timestep_limit
+        max_steps = env.spec.timestep_limit
 
         returns = []
         observations = []
         actions = []
-        for i in range(args.num_rollouts):
+        for i in range(20):
             print('iter', i)
             obs = env.reset()
             done = False
