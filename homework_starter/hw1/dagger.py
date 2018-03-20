@@ -255,4 +255,5 @@ def run_policy():
 
 
 if __name__ == "__main__":
+    build_policy()
     run_policy()
