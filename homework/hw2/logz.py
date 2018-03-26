@@ -13,6 +13,8 @@ To load the learning curves, you can do, for example
 A = np.genfromtxt('/tmp/expt_1468984536/log.txt',delimiter='\t',dtype=None, names=True)
 A['EpRewMean']
 
+
+
 """
 
 import os.path as osp, shutil, time, atexit, os, subprocess
