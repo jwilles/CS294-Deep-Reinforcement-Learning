@@ -12,6 +12,7 @@ from multiprocessing import Process
 # Utilities
 #============================================================================================#
 
+
 def build_mlp(
         input_placeholder, 
         output_size,
