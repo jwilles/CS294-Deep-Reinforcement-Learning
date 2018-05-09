@@ -14,6 +14,7 @@ A = np.genfromtxt('/tmp/expt_1468984536/log.txt',delimiter='\t',dtype=None, name
 A['EpRewMean']
 
 
+o
 
 """
 
